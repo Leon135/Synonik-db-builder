@@ -1,5 +1,5 @@
-use crate::models::{BaseFormEntry, SynonymEntry, SynonymGroupEntry, WordEntry};
-use rusqlite::{Connection, Result};
+use crate::models::{BaseFormEntry, SynonymGroupEntry, WordEntry, WordInGroupEntry};
+use rusqlite::Result;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
@@ -12,8 +12,8 @@ pub struct DatabaseBuilder {
 
     base_entries: Vec<BaseFormEntry>,
 
-    synonym_entries: Vec<SynonymEntry>,
-
+    synonym_groups: Vec<SynonymGroupEntry>,
+    word_in_group: Vec<WordInGroupEntry>,
     next_group_id: u32,
 }
 
@@ -24,7 +24,8 @@ impl DatabaseBuilder {
             words: Vec::new(),
             next_word_id: 1,
             base_entries: Vec::new(),
-            synonym_entries: Vec::new(),
+            synonym_groups: Vec::new(),
+            word_in_group: Vec::new(),
             next_group_id: 1,
         }
     }
@@ -100,7 +101,6 @@ impl DatabaseBuilder {
 
             if !current_line.starts_with('-') {
                 let header_parts: Vec<&str> = current_line.split('|').collect();
-
                 let head_word = header_parts[0].trim().to_lowercase();
                 let head_word_id = self.get_or_set_word_id(head_word);
 
@@ -109,37 +109,50 @@ impl DatabaseBuilder {
                     synonym_group_count = header_parts[1].trim().parse::<usize>().unwrap_or(0);
                 }
 
-                let mut synonym_groups: Vec<SynonymGroupEntry> = Vec::new();
-
                 let group_start = line_number + 1;
                 let group_end = (line_number + synonym_group_count).min(lines.len() - 1);
 
                 for group_line_number in group_start..=group_end {
-                    let mut group_synonyms: SynonymGroupEntry = SynonymGroupEntry {
-                        id: self.next_group_id,
-                        group_meaning: "test".to_string(),
-                        synonyms_ids: Vec::new(),
-                    };
-
                     let current_group_line = &lines[group_line_number];
                     let synonyms_in_line: Vec<&str> = current_group_line.split('|').collect();
 
+                    let group_meaning = synonyms_in_line[1].trim().to_lowercase();
+
+                    let mut synonym_ids: Vec<u32> = Vec::new();
                     for synonym in synonyms_in_line {
                         if synonym != "-" {
                             let synonym_id = self.get_or_set_word_id(synonym.trim().to_lowercase());
-                            group_synonyms.synonyms_ids.push(synonym_id);
+                            synonym_ids.push(synonym_id);
                         }
                     }
-                    if group_synonyms.synonyms_ids.len() > 0 {
-                        synonym_groups.push(group_synonyms);
+
+                    synonym_ids.sort();
+                    synonym_ids.dedup();
+
+                    if !synonym_ids.is_empty() {
+                        let group_id = self.next_group_id;
                         self.next_group_id += 1;
+
+                        for &sid in &synonym_ids {
+                            self.word_in_group.push(WordInGroupEntry {
+                                word_id: sid,
+                                group_id,
+                            });
+                        }
+                        if !synonym_ids.contains(&head_word_id) {
+                            self.word_in_group.push(WordInGroupEntry {
+                                word_id: head_word_id,
+                                group_id,
+                            });
+                        }
+                        self.synonym_groups.push(SynonymGroupEntry {
+                            id: group_id,
+                            group_meaning: group_meaning,
+                            synonyms_ids: synonym_ids,
+                        });
                     }
                 }
 
-                self.synonym_entries.push(SynonymEntry {
-                    base_form_id: head_word_id,
-                    synonyms_groups: synonym_groups,
-                });
                 line_number = group_end + 1;
             } else {
                 line_number += 1;
@@ -167,16 +180,20 @@ impl DatabaseBuilder {
             (),
         )?;
         connection.execute(
-            "CREATE TABLE IF NOT EXISTS Synonyms (base_form_id INTEGER PRIMARY KEY, synonym_groups TEXT NOT NULL);",
+            "CREATE TABLE IF NOT EXISTS SynonymGroups (id INTEGER PRIMARY KEY, group_meaning TEXT NOT NULL);",
+            (),
+        )?;
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS WordInGroup (word_id INTEGER NOT NULL, group_id INTEGER NOT NULL, PRIMARY KEY (word_id, group_id));",
             (),
         )?;
 
         let tx = connection.transaction()?;
 
         {
-            let mut stmt = tx.prepare("INSERT INTO Words (word, id) VALUES (?1, ?2)")?;
+            let mut stmt = tx.prepare("INSERT INTO Words (id, word) VALUES (?1, ?2)")?;
             for word in &self.words {
-                stmt.execute((&word.word, word.id))?;
+                stmt.execute((word.id, &word.word))?;
             }
         }
 
@@ -190,12 +207,18 @@ impl DatabaseBuilder {
         }
 
         {
-            let mut stmt = tx.prepare(
-                "INSERT OR REPLACE INTO Synonyms (base_form_id, synonym_groups) VALUES (?1, ?2)",
-            )?;
-            for entry in &self.synonym_entries {
-                let json = serde_json::to_string(&entry.synonyms_groups)?;
-                stmt.execute((entry.base_form_id, &json))?;
+            let mut stmt =
+                tx.prepare("INSERT INTO SynonymGroups (id, group_meaning) VALUES (?1, ?2)")?;
+            for g in &self.synonym_groups {
+                stmt.execute((g.id, &g.group_meaning))?;
+            }
+        }
+
+        {
+            let mut stmt =
+                tx.prepare("INSERT INTO WordInGroup (word_id, group_id) VALUES (?1, ?2)")?;
+            for wig in &self.word_in_group {
+                stmt.execute((wig.word_id, wig.group_id))?;
             }
         }
 
