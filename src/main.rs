@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // extract_zip("Data/sjp-odm.zip")?;
 
     let mut builder = database_builder::DatabaseBuilder::new();
-    builder.test_export_json()?;
+    builder.create_database()?;
 
     Ok(())
 }

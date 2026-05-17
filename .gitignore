@@ -1,4 +1,6 @@
-/target
+target/
 Data/
 
 *.json
+*.db
+*.cs

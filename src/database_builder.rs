@@ -1,4 +1,5 @@
 use crate::models::{BaseFormEntry, SynonymEntry, SynonymGroupEntry, WordEntry};
+use rusqlite::{Connection, Result};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
@@ -10,12 +11,9 @@ pub struct DatabaseBuilder {
     next_word_id: u32,
 
     base_entries: Vec<BaseFormEntry>,
-    next_base_id: u32,
 
     synonym_entries: Vec<SynonymEntry>,
-    next_synonym_id: u32,
 
-    synonym_groups: Vec<SynonymGroupEntry>,
     next_group_id: u32,
 }
 
@@ -26,10 +24,7 @@ impl DatabaseBuilder {
             words: Vec::new(),
             next_word_id: 1,
             base_entries: Vec::new(),
-            next_base_id: 1,
             synonym_entries: Vec::new(),
-            next_synonym_id: 1,
-            synonym_groups: Vec::new(),
             next_group_id: 1,
         }
     }
@@ -86,11 +81,9 @@ impl DatabaseBuilder {
                 let word_id = self.get_or_set_word_id(word);
 
                 self.base_entries.push(BaseFormEntry {
-                    id: self.next_base_id,
                     word_id,
                     base_form_id,
                 });
-                self.next_base_id += 1;
             }
         }
 
@@ -122,7 +115,11 @@ impl DatabaseBuilder {
                 let group_end = (line_number + synonym_group_count).min(lines.len() - 1);
 
                 for group_line_number in group_start..=group_end {
-                    let mut group_synonyms: SynonymGroupEntry = SynonymGroupEntry { id: self.next_group_id, group_meaning: "test".to_string(), synonyms_ids: Vec::new() };
+                    let mut group_synonyms: SynonymGroupEntry = SynonymGroupEntry {
+                        id: self.next_group_id,
+                        group_meaning: "test".to_string(),
+                        synonyms_ids: Vec::new(),
+                    };
 
                     let current_group_line = &lines[group_line_number];
                     let synonyms_in_line: Vec<&str> = current_group_line.split('|').collect();
@@ -137,11 +134,12 @@ impl DatabaseBuilder {
                         synonym_groups.push(group_synonyms);
                         self.next_group_id += 1;
                     }
-                    
                 }
-                
-                self.synonym_entries.push(SynonymEntry { id: self.next_synonym_id, word_id: head_word_id, synonyms_groups: synonym_groups });
-                self.next_synonym_id += 1;
+
+                self.synonym_entries.push(SynonymEntry {
+                    base_form_id: head_word_id,
+                    synonyms_groups: synonym_groups,
+                });
                 line_number = group_end + 1;
             } else {
                 line_number += 1;
@@ -151,21 +149,64 @@ impl DatabaseBuilder {
         Ok(())
     }
 
-    pub fn test_export_json(&mut self) -> Result<(), Box<dyn Error>> {
+    fn save_to_database(&self) -> Result<(), Box<dyn Error>> {
+        let mut connection = rusqlite::Connection::open("synonik.db")?;
+
+        connection.execute_batch(
+            "PRAGMA journal_mode = MEMORY;
+             PRAGMA synchronous = OFF;
+             PRAGMA temp_store = MEMORY;",
+        )?;
+
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS Words (id INTEGER PRIMARY KEY, word TEXT NOT NULL);",
+            (),
+        )?;
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS BaseForms (word_id INTEGER PRIMARY KEY, base_form_id INTEGER NOT NULL);",
+            (),
+        )?;
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS Synonyms (base_form_id INTEGER PRIMARY KEY, synonym_groups TEXT NOT NULL);",
+            (),
+        )?;
+
+        let tx = connection.transaction()?;
+
+        {
+            let mut stmt = tx.prepare("INSERT INTO Words (word, id) VALUES (?1, ?2)")?;
+            for word in &self.words {
+                stmt.execute((&word.word, word.id))?;
+            }
+        }
+
+        {
+            let mut stmt = tx.prepare(
+                "INSERT OR REPLACE INTO BaseForms (word_id, base_form_id) VALUES (?1, ?2)",
+            )?;
+            for entry in &self.base_entries {
+                stmt.execute((entry.word_id, entry.base_form_id))?;
+            }
+        }
+
+        {
+            let mut stmt = tx.prepare(
+                "INSERT OR REPLACE INTO Synonyms (base_form_id, synonym_groups) VALUES (?1, ?2)",
+            )?;
+            for entry in &self.synonym_entries {
+                let json = serde_json::to_string(&entry.synonyms_groups)?;
+                stmt.execute((entry.base_form_id, &json))?;
+            }
+        }
+
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn create_database(&mut self) -> Result<(), Box<dyn Error>> {
         self.create_base_entries()?;
         self.create_synonym_entries()?;
-
-        std::fs::write("test_words.json", serde_json::to_string_pretty(&self.words)?)?;
-        std::fs::write("test_base_forms.json", serde_json::to_string_pretty(&self.base_entries)?)?;
-        std::fs::write("test_synonyms.json", serde_json::to_string_pretty(&self.synonym_entries)?)?;
-        std::fs::write("test_synonym_groups.json", serde_json::to_string_pretty(&self.synonym_groups)?)?;
-
-        println!("=== PODSUMOWANIE ===");
-        println!("Słowa:     {}", self.words.len());
-        println!("Odmiany:   {}", self.base_entries.len());
-        println!("Synonimy:  {}", self.synonym_entries.len());
-        println!("Grupy:     {}", self.synonym_groups.len());
-        println!("\nZapisano do test_*.json");
+        self.save_to_database()?;
 
         Ok(())
     }
