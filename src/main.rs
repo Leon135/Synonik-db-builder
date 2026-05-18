@@ -1,7 +1,11 @@
 use std::error::Error;
 
+mod assets_service;
 mod database_builder;
 mod models;
+mod schema;
+
+use crate::assets_service::{download_file, extract_zip};
 
 fn main() -> Result<(), Box<dyn Error>> {
     // download_file(

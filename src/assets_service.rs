@@ -3,7 +3,7 @@ use std::fs;
 use std::io;
 use zip::ZipArchive;
 
-fn download_file(url: &str, file_name: &str) -> Result<(), Box<dyn Error>> {
+pub fn download_file(url: &str, file_name: &str) -> Result<(), Box<dyn Error>> {
     let data_dir = "Data";
     fs::create_dir_all(data_dir)?;
 
@@ -17,7 +17,7 @@ fn download_file(url: &str, file_name: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn extract_zip(file_path: &str) -> Result<(), Box<dyn Error>> {
+pub fn extract_zip(file_path: &str) -> Result<(), Box<dyn Error>> {
     let base_dir = match std::env::current_dir() {
         Ok(dir) => dir,
         Err(e) => return Err(Box::new(e)),

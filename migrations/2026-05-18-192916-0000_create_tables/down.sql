@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS words;
+DROP TABLE IF EXISTS base_forms;
+DROP TABLE IF EXISTS synonym_groups;
+DROP TABLE IF EXISTS word_in_group;
