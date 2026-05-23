@@ -3,7 +3,21 @@ use std::fs;
 use std::io;
 use zip::ZipArchive;
 
-pub fn download_file(url: &str, file_name: &str) -> Result<(), Box<dyn Error>> {
+pub fn download_assets() -> Result<(), Box<dyn Error>> {
+    println!("Downloading database assets...");
+    download_file(
+        "https://raw.githubusercontent.com/LibreOffice/dictionaries/refs/heads/master/pl_PL/th_pl_PL_v2.dat",
+        "th_pl_PL_v2.dat",
+    )?;
+    download_file(
+        "https://sjp.pl/sl/odmiany/sjp-odm-20260511.zip",
+        "sjp-odm.zip",
+    )?;
+    extract_zip("Data/sjp-odm.zip")?;
+    Ok(())
+}
+
+fn download_file(url: &str, file_name: &str) -> Result<(), Box<dyn Error>> {
     let data_dir = "Data";
     fs::create_dir_all(data_dir)?;
 
@@ -13,11 +27,11 @@ pub fn download_file(url: &str, file_name: &str) -> Result<(), Box<dyn Error>> {
     let context = response.bytes()?;
     fs::write(&file_path, &context)?;
 
-    println!("Saved to: {}", file_path);
+    println!("Downloaded to: {}", file_path);
     Ok(())
 }
 
-pub fn extract_zip(file_path: &str) -> Result<(), Box<dyn Error>> {
+fn extract_zip(file_path: &str) -> Result<(), Box<dyn Error>> {
     let base_dir = match std::env::current_dir() {
         Ok(dir) => dir,
         Err(e) => return Err(Box::new(e)),
@@ -65,6 +79,7 @@ pub fn extract_zip(file_path: &str) -> Result<(), Box<dyn Error>> {
             "Some files failed to extract. Check logs for details.",
         )))
     } else {
+        println!("Successfully extracted all files from {}", file_path.display());
         Ok(())
     }
 }

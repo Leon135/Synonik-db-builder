@@ -22,7 +22,7 @@ pub struct DatabaseBuilder {
 }
 
 impl DatabaseBuilder {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             data_dir: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Data"),
             word_map: HashMap::new(),
@@ -214,11 +214,17 @@ impl DatabaseBuilder {
         Ok(())
     }
 
-    pub fn create_database(&mut self) -> Result<(), Box<dyn Error>> {
+    fn create_database(&mut self) -> Result<(), Box<dyn Error>> {
         self.create_base_entries()?;
         self.create_synonym_entries()?;
         self.save_to_database()?;
 
         Ok(())
     }
+}
+
+pub fn create_database() -> Result<(), Box<dyn Error>> {
+    let mut builder = DatabaseBuilder::new();
+    builder.create_database()?;
+    Ok(())
 }
