@@ -15,14 +15,15 @@ A Rust CLI tool that downloads Polish thesaurus and inflection data and builds a
 
 ```
 ┌──────────┐    ┌──────────────────┐    ┌──────────────┐
-│   words  │    │   base_forms     │    │synonym_groups│
+│   words  │    │    base_forms    │    │synonym_groups│
 ├──────────┤    ├──────────────────┤    ├──────────────┤
-│ id (PK)  │◄──►│ word_id (PK,FK)  │    │ group_id (PK)│
-│ word     │    │ base_form_id(FK) │───►│ meaning      │
+│ id (PK)  │<───┤ word_id (PK,FK)  │    │ group_id (PK)│
+│ word     │<───┤ base_form_id(FK) │    │ group_meaning│
 └────┬─────┘    └──────────────────┘    └──────────────┘
-     │                                          ▲
+     │                                          │
+     │                                          │
      │    ┌──────────────────┐                  │
-     └───►│  word_in_group   │──────────────────┘
+     └───>│  word_in_group   │──────────────────┘
           ├──────────────────┤
           │ word_id (PK,FK)  │
           │ group_id (PK,FK) │
@@ -47,9 +48,7 @@ Select an option:
 1. **Download database assets** — downloads and extracts the thesaurus `.oxt` file and the SJP inflection `.zip` into `Data/`.
 2. **Build database** — parses `Data/odm.txt` and `Data/th_pl_PL_v2.dat`, creates a `database.sqlite` with all four tables populated.
 
-### Environment
-
-The database path can be set via the `DATABASE_URL` environment variable (defaults to `database.sqlite` in the current directory). A `.env` file with `DATABASE_URL=database.sqlite` is also supported.
+Both steps resolve `Data/` and `database.sqlite` relative to the current directory, so always run from the project root. The output path is hardcoded to `database.sqlite`.
 
 ## Data Directory
 

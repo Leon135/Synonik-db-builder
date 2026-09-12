@@ -22,7 +22,7 @@ pub struct DatabaseBuilder {
 impl DatabaseBuilder {
     fn new() -> Self {
         Self {
-            data_dir: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Data"),
+            data_dir: PathBuf::from("Data"),
             word_map: HashMap::new(),
             words: Vec::new(),
             next_word_id: 1,
@@ -151,8 +151,8 @@ impl DatabaseBuilder {
         let mut seen = HashSet::new();
         self.base_entries.retain(|e| seen.insert((e.word_id, e.base_form_id)));
 
-        let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "database.sqlite".to_string());
-        let mut conn = SqliteConnection::establish(&database_url)?;
+        let database_url = "database.sqlite";
+        let mut conn = SqliteConnection::establish(database_url)?;
 
         conn.batch_execute(
             "PRAGMA journal_mode = MEMORY;

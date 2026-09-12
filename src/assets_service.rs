@@ -7,11 +7,11 @@ pub fn download_assets() -> Result<(), Box<dyn Error>> {
     download_file(
         "https://pobierz.dobryslownik.pl/pl-dict-latest.oxt",
         "pl-dict-latest.oxt",
-    )?; 
+    )?;
     extract_zip("Data/pl-dict-latest.oxt")?;
     // * sjp.pl uploads new file with different name. Needs to be checked whether there is a link like "latest.zip"
     download_file(
-        "https://sjp.pl/sl/odmiany/sjp-odm-20260601.zip",
+        "https://sjp.pl/sl/odmiany/sjp-odm-20260901.zip",
         "sjp-odm.zip",
     )?;
     extract_zip("Data/sjp-odm.zip")?;
@@ -22,7 +22,7 @@ fn download_file(url: &str, file_name: &str) -> Result<(), Box<dyn Error>> {
     let data_dir = "Data";
     fs::create_dir_all(data_dir)?;
 
-    let response = reqwest::blocking::get(url)?;
+    let response = reqwest::blocking::get(url)?.error_for_status()?;
 
     let file_path = format!("{}/{}", data_dir, file_name);
     let context = response.bytes()?;
